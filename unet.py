@@ -46,23 +46,32 @@ class DownConv(nn.Module):
     A helper Module that performs 2 convolutions and 1 MaxPool.
     A ReLU activation follows each convolution.
     """
-    def __init__(self, in_channels, out_channels, dropout, pooling=True):
+    def __init__(self, in_channels, out_channels, dropout, batch_norm, pooling=True):
         super(DownConv, self).__init__()
 
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.pooling = pooling
         self.dropout = dropout
+        self.batch_norm = batch_norm
 
         self.conv1 = conv3x3(self.in_channels, self.out_channels)
         self.conv2 = conv3x3(self.out_channels, self.out_channels)
 
+        if self.batch_norm:
+            self.conv_batch_norm = nn.BatchNorm2d(self.out_channels)
         if self.pooling:
             self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
 
     def forward(self, x):
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
+        x = self.conv1(x)
+        if self.batch_norm:
+            x = self.conv_batch_norm(x)
+        x = F.relu(x)
+        x = self.conv2(x)
+        if self.batch_norm:
+            x = self.conv_batch_norm(x)
+        x = F.relu(x)
         # x = self.dropout(x)
         before_pool = x
         if self.pooling:
@@ -108,9 +117,11 @@ class UpConv(nn.Module):
             x = torch.cat((from_up, from_down), 1)
         else:
             x = from_up + from_down
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
-        # x = self.dropout(x)
+
+        x = self.conv1(x)
+        x = F.relu(x)
+        x = self.conv2(x)
+        x = F.relu(x)
         return x
 
 class UNet(nn.Module):
@@ -141,6 +152,7 @@ class UNet(nn.Module):
         self.depth = config['unet']['depth']
         up_mode = config['unet']['up_mode']
         merge_mode = config['unet']['merge_mode']
+        self.batch_norm = config['unet']['batch_norm']
 
         super(UNet, self).__init__()
         self.dropout = nn.Dropout(config['train']['dropout'])
@@ -179,7 +191,7 @@ class UNet(nn.Module):
             outs = self.start_channels * (2 ** i)
             pooling = True if i < self.depth - 1 else False
 
-            down_conv = DownConv(ins, outs, self.dropout, pooling=pooling)
+            down_conv = DownConv(ins, outs, self.dropout, self.batch_norm, pooling=pooling)
             self.down_convs.append(down_conv)
 
         # create the decoder pathway and add to a list

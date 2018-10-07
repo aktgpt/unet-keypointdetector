@@ -1,0 +1,42 @@
+{
+    "data": {
+        "image_folder":         "/home/ankit.gupta/unet_multiple_markers/dataset/multiple_markers_images/",
+        "annotation_folder":    "/home/ankit.gupta/unet_multiple_markers/dataset/unet_annotations/",
+        "augment":              true,
+        "bbox_scale_factor":     0.25,
+        "negative_sample_ratio": 0.25
+    },
+
+    "mask": {
+        "kernel_size": 5,
+        "variance": 0.3
+    },
+
+    "train": {
+        "learning_rate": 1e-5,
+        "decay_type": "step",
+        "learning_rate_decay": 0.5,
+        "epoch_decay": 10,
+        "epochs": 100,
+        "batch_size": 8,
+        "val_split_ratio": 0.2,
+        "model_save_path": "models/ce_loss/",
+        "dropout":0.3
+    },
+
+    "unet": {
+        "input_shape": [128, 128, 3],
+        "n_classes": 1,
+        "start_ch": 32,
+        "depth": 4,
+        "batch_norm": true,
+        "up_mode": "transpose",
+        "merge_mode": "add"
+    },
+
+    "non_affine_aug": true,
+
+    "eval": {
+        "failure_thresh": 30
+    }
+}

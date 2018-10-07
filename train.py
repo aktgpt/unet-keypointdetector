@@ -43,7 +43,7 @@ class Trainer:
 
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.Model = model.to(self.device)
-
+        self.logs_save_dir = config['train']['log_dir']
 
     # def train(self):
     #     train_loader, validation_loader = get_data_loaders(self.config)
@@ -128,8 +128,7 @@ class Trainer:
 
     def train_ignite(self):
         train_loader, validation_loader = get_data_loaders(self.config)
-        log_dir = "logs/"
-        writer = create_summary_writer(self.Model, train_loader, log_dir)
+        writer = create_summary_writer(self.Model, train_loader, self.logs_save_dir)
 
         self.optimizer = Adam(self.Model.parameters(), lr=self.learning_rate, betas=(0.9, 0.999))
         self.learning_rate_scheduler()
@@ -202,7 +201,7 @@ class Trainer:
             writer.add_scalar("validation/mean_euclidean_dist", precision_recall_loss['mean_euclidean_dist'], engine.state.epoch)
             writer.add_scalar("validation/cross_entropy_loss", cross_entropy_loss, engine.state.epoch)
 
-        checkpointer = ModelCheckpoint(self.model_save_path, 'unet_v0.7_ce_loss', save_interval=1, n_saved=20, require_empty=False,
+        checkpointer = ModelCheckpoint(self.model_save_path, 'unet_v_1_', save_interval=1, n_saved=20, require_empty=False,
                                         save_as_state_dict=True)
         # early_stopping = EarlyStopping(patience=5, score_function=self.score_function, trainer=trainer)
 
@@ -281,7 +280,7 @@ def create_summary_writer(model, data_loader, log_dir):
 
 
 if __name__ == '__main__':
-    args = argparser.parse_args(['-c', 'configs/config.json'])
+    args = argparser.parse_args(['-c', 'configs/config_1.json'])
     config_path = args.conf
 
     with open(config_path) as config_buffer:
