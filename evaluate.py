@@ -11,6 +11,7 @@ import glob
 import matplotlib.pylab as plt
 import copy
 import time
+from utility import to_image_range
 
 argparser = argparse.ArgumentParser(
     description='Train U-net dataset')
@@ -127,26 +128,6 @@ class UpConv(nn.Module):
         return x
 
 class UNet(nn.Module):
-    """ `UNet` class is based on https://arxiv.org/abs/1505.04597
-    The U-Net is a convolutional encoder-decoder neural network.
-    Contextual spatial information (from the decoding,
-    expansive pathway) about an input tensor is merged with
-    information representing the localization of details
-    (from the encoding, compressive pathway).
-    Modifications to the original paper:
-    (1) padding is used in 3x3 convolutions to prevent loss
-        of border pixels
-    (2) merging outputs does not require cropping due to (1)
-    (3) residual connections can be used by specifying
-        UNet(merge_mode='add')
-    (4) if non-parametric upsampling is used in the decoder
-        pathway (specified by upmode='upsample'), then an
-        additional 1x1 2d convolution occurs after upsampling
-        to reduce channel dimensionality by a factor of 2.
-        This channel halving happens with the convolution in
-        the tranpose convolution (specified by upmode='transpose')
-    """
-
     def __init__(self, config):
         self.input_shape = tuple(config['unet']['input_shape'])
         self.num_classes = config['unet']['n_classes']
@@ -261,6 +242,7 @@ class MultipleKeypointDetector:
     def init(self):
         # self.summary()
         self.load_weights(self.weight_path)
+        self.summary()
 
     def load_weights(self, path):
         self.model.cuda().float()
@@ -285,31 +267,17 @@ class MultipleKeypointDetector:
         end = time.time()
         print(end-start)
 
-        # points = self.keypoints_location(pred)
-        pred_np = self.to_image_range(pred_np)
+        pred_np = to_image_range(pred_np)
+        points = self.keypoints_location(pred_np)
         # prediction_image = self.to_image_range(pred_image)
-        return pred_np
+        return points
 
     def convert_predict_to_gray(self, prediction):
         pred_image = prediction[0, :, :, 0]
         mask = cv2.resize(pred_image, (self.img_shape[1], self.img_shape[0]))
         return mask
 
-    def to_image_range(self, array):
-        """
-        This method maps the value range of any given array to the value range (0, 255).
-        :param array: the input array
-        :return: the linearly mapped output array with the same shape as the input array and value
-                 range (0, 255).
-        """
-        old_min = np.min(array)
-        old_max = np.max(array)
-        old_range = old_max - old_min
-        new_range = 255
-        arr_norm = [np.maximum(0, np.minimum(255, ((x - old_min) * new_range / old_range))) for x in array]
-        return np.reshape(arr_norm, array.shape).astype(np.uint8)
-
-    def find_local_maxima(self, image, threshold):
+    def keypoints_location(self, image, threshold):
         thresh_image = copy.deepcopy(image)
         percentile_thres = np.percentile(image, threshold)
         thresh_image[image <= percentile_thres] = 0
@@ -346,8 +314,10 @@ if __name__ == '__main__':
     for i in range(len(images)):
         image = cv2.imread(images[i])
         # start = time.time()
-        prediction = keypoint_detector.predict(image)
+        predictions = keypoint_detector.predict(image)
         # end = time.time()
         # print(end-start)
-        cv2.imshow("pred", prediction)
+        for i in range(len(predictions)):
+            cv2.circle(imageg,(predictions[i,0], predictions[i,1]), 3, (0,0,255), -1))
+        cv2.imshow("keypoints", image)
         cv2.waitKey(200)

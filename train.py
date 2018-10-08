@@ -9,7 +9,7 @@ from torch.optim import Adam
 from dataset import get_data_loaders
 import argparse
 import json
-from unet import UNet, UNetLoss, FocalLoss
+from unet import UNet, UNetCrossEntropyLoss, FocalLoss
 from utility import save_mask_and_pred
 from ignite.handlers import ModelCheckpoint, EarlyStopping
 from ignite.engine import Events, Engine
@@ -49,86 +49,10 @@ class Trainer:
         if not os.path.exists(self.logs_save_dir):
             os.makedirs(self.logs_save_dir)
 
-    # def train(self):
-    #     train_loader, validation_loader = get_data_loaders(self.config)
-    #     # self.Model.cuda()
-    #     self.saved_images = 0
-    #     self.optimizer = Adam(self.Model.parameters(), lr=self.learning_rate, betas=(0.9, 0.999))
-    #     criterion = UNetLoss().cuda()
-    #     # criterion = nn.NLLLoss2d()
-    #     for epoch in range(1, self.epochs):
-    #         self.run_train(train_loader, criterion, epoch)
-    #         self.run_val(validation_loader, criterion, epoch)
-    #
-    # def run_train(self, train_loader, criterion, epoch):
-    #     self.Model.train()
-    #     num_batches = 0
-    #     avg_loss = 0
-    #
-    #     dtype = torch.cuda.DoubleTensor if torch.cuda.is_available() else torch.Tensor
-    #     softmx = nn.Softmax(dim=0)
-    #
-    #     for batch_idx, sample_batched in enumerate(train_loader):
-    #         data = sample_batched['image']
-    #         target = sample_batched['mask'].cuda()
-    #         data, target = Variable(data.type(dtype)), Variable(target.type(dtype))
-    #
-    #         self.optimizer.zero_grad()
-    #         output = self.Model(data)
-    #         output = softmx(output)
-    #         if batch_idx % 10 == 0:
-    #             self.saved_images=self.saved_images+1
-    #             save_mask_and_pred(target[0, 0, :, :], output[0, 0, :, :])
-    #
-    #         loss = criterion(output, target)
-    #         loss.backward()
-    #         self.optimizer.step()
-    #         print(loss.item())
-    #         avg_loss += loss.item()
-    #         num_batches += 1
-    #     avg_loss /= num_batches
-    #     print('epoch: ' + str(epoch) + ', training loss: ' + str(avg_loss))
-    #
-    # def run_val(self, validation_loader, criterion, epoch):
-    #     dtype = torch.cuda.DoubleTensor if torch.cuda.is_available() else torch.Tensor
-    #
-    #     self.Model.eval()
-    #     num_batches = 0
-    #     avg_loss = 0
-    #     for batch_idx, sample_batched in enumerate(validation_loader):
-    #         data = sample_batched['image']
-    #         target = sample_batched['mask'].cuda()
-    #         data, target = Variable(data.type(dtype)), Variable(target.type(dtype))
-    #         output = self.Model.forward(data)
-    #         # output = (output > 0.5).type(dtype)
-    #         loss = criterion(output, target)
-    #         print(loss.item())
-    #         avg_loss += loss.item()
-    #         num_batches += 1
-    #     avg_loss /= num_batches
-    #     print('epoch: ' + str(epoch) + ', validation loss: ' + str(avg_loss))
-
     def learning_rate_scheduler(self):
         if self.learning_decay_type == 'step':
             self.scheduler = StepLR(self.optimizer, step_size= self.epoch_decay, gamma=self.learning_rate_decay)
 
-    def custom_loss(self, y_true, y_pred):
-        criterion = nn.NLLLoss2d()
-        loss = criterion(y_true, y_pred)
-        self.loss = loss
-
-    def predict(self, x):
-        if isinstance(x, np.ndarray):
-            x = torch.from_numpy(x)
-        x = Variable(x.unsqueeze(0)).cuda()
-        output = F.sigmoid(self.model(x)).data.cpu()
-        y_pred = output
-        return y_pred.numpy()
-
-
-    def evaluate(self, dataset, metrics):
-        # TODO
-        raise NotImplementedError
 
     def train_ignite(self):
         train_loader, validation_loader = get_data_loaders(self.config)
@@ -136,10 +60,11 @@ class Trainer:
 
         self.optimizer = Adam(self.Model.parameters(), lr=self.learning_rate, betas=(0.9, 0.999))
         self.learning_rate_scheduler()
-        loss = UNetLoss().cuda()
+        loss = UNetCrossEntropyLoss().cuda()
 
         trainer = create_trainer(model=self.Model, optimizer=self.optimizer, criterion=loss, device=self.device)
-        evaluator = create_evaluator(self.Model, metrics={'CrossEntropy':Loss(loss), 'PrecisionRecall':PrecisionRecall()}, device=self.device)
+        evaluator = create_evaluator(self.Model, metrics={'CrossEntropy':Loss(loss),
+                                    'PrecisionRecall':PrecisionRecall()}, device=self.device)
 
         desc = "ITERATION - loss: {:.2f}"
         pbar = tqdm(
@@ -211,9 +136,7 @@ class Trainer:
 
         trainer.add_event_handler(Events.EPOCH_COMPLETED, checkpointer, {'epoch': self.Model})
         # trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
-
         # evaluator.add_event_handler(Events.COMPLETED, early_stopping)
-
 
         trainer.run(train_loader, max_epochs=self.epochs)
         pbar.close()

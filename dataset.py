@@ -37,66 +37,51 @@ class MultipleMarkersDataset(Dataset):
                     })
 
         bbox_scale_factor = config['data']['bbox_scale_factor']
-        if bbox_scale_factor is not 0.:
+        if bbox_scale_factor:
             self.modify_bbox_annotations(bbox_scale_factor)
 
         negative_sample_ratio = config['data']['negative_sample_ratio']
-        if negative_sample_ratio is not 0.:
+        if negative_sample_ratio:
             self.add_negative_images(negative_sample_ratio)
 
         sometimes = lambda aug: iaa.Sometimes(0.2, aug)
         self.transform = iaa.Sequential(
             [
-                # apply the following augmenters to most images
-                iaa.Fliplr(0.2),  # horizontally flip 50% of all images
-                iaa.Flipud(0.2),  # vertically flip 20% of all images
-                sometimes(iaa.Crop(percent=(0, 0.1))),  # crop images by 0-10% of their height/width
+                iaa.Fliplr(0.2),
+                iaa.Flipud(0.2),
+                sometimes(iaa.Crop(percent=(0, 0.1))),
                 sometimes(iaa.Affine(
                     scale={"x": (0.8, 1.2), "y": (0.8, 1.2)},
-                    # scale images to 80-120% of their size, individually per axis
                     translate_percent={"x": (-0.2, 0.2), "y": (-0.2, 0.2)},
-                    # translate by -20 to +20 percent (per axis)
-                    rotate=(-5, 5),  # rotate by -45 to +45 degrees
-                    shear=(-5, 5),  # shear by -16 to +16 degrees
-                    order=[0, 1],  # use nearest neighbour or bilinear interpolation (fast)
-                    cval=(0, 1),  # if mode is constant, use a cval between 0 and 255
-                    mode=ia.ALL  # use any of scikit-image's warping modes (see 2nd image from the top for examples)
+                    rotate=(-5, 5),
+                    shear=(-5, 5),
+                    order=[0, 1],
                 )),
-                # execute 0 to 5 of the following (less important) augmenters per image
-                # don't execute all of them, as that would often be way too strong
+
                 iaa.SomeOf((0, 5),
                            [
                                # sometimes(iaa.Superpixels(p_replace=(0, 1.0), n_segments=(20, 200), name="superpixels")),
-                               # convert images into their superpixel representation
-                               iaa.OneOf([
-                                   iaa.GaussianBlur((0, 3.0), name="gaussianblur"),  # blur images with a sigma between 0 and 3.0
+                                   iaa.OneOf([
+                                   iaa.GaussianBlur((0, 3.0), name="gaussianblur"),
                                    iaa.AverageBlur(k=(2, 7), name="averageblur"),
-                                   # blur image using local means with kernel sizes between 2 and 7
                                    iaa.MedianBlur(k=(3, 11), name="medianblur"),
-                                   # blur image using local medians with kernel sizes between 2 and 7
                                ]),
-                               iaa.Sharpen(alpha=(0, 1.0), lightness=(0.75, 1.5), name="sharpen"),  # sharpen images
+                               iaa.Sharpen(alpha=(0, 1.0), lightness=(0.75, 1.5), name="sharpen"),
                                # iaa.Emboss(alpha=(0, 1.0), strength=(0, 2.0)), # emboss images
-                               # search either for all edges or for directed edges
                                # sometimes(iaa.OneOf([
                                #     iaa.EdgeDetect(alpha=(0, 0.7)),
                                #     iaa.DirectedEdgeDetect(alpha=(0, 0.7), direction=(0.0, 1.0)),
                                # ])),
                                iaa.AdditiveGaussianNoise(loc=0, scale=(0.0, 0.05 * 255), per_channel=0.5, name="additivegaussianblur"),
-                               # add gaussian noise to images
                                iaa.OneOf([
-                                   iaa.Dropout((0.01, 0.1), per_channel=0.5),  # randomly remove up to 10% of the pixels
+                                   iaa.Dropout((0.01, 0.1), per_channel=0.5),
                                    iaa.CoarseDropout((0.03, 0.15), size_percent=(0.02, 0.05), per_channel=0.2),
                                ]),
-                               iaa.Invert(0.05, per_channel=True, name="invertchannel"),  # invert color channels
+                               iaa.Invert(0.05, per_channel=True, name="invertchannel"),
                                iaa.Add((-10, 10), per_channel=0.5, name="colorjitter"),
-                               # change brightness of images (by -10 to 10 of original value)
                                iaa.Multiply((0.5, 1.5), per_channel=0.5, name="changebrightness"),
-                               # change brightness of images (50-150% of original value)
                                iaa.ContrastNormalization((0.5, 2.0), per_channel=0.5, name="contrastnorm"),  # improve or worsen the contrast
-                               # iaa.Grayscale(alpha=(0.0, 1.0)),
                                sometimes(iaa.ElasticTransformation(alpha=(0.5, 3.5), sigma=0.25, name="elastictransform")),
-                               # move pixels locally around (with random strengths)
                                # sometimes(iaa.PiecewiseAffine(scale=(0.01, 0.05))) # sometimes move parts of the image around
                            ],
                            random_order=True
@@ -123,7 +108,6 @@ class MultipleMarkersDataset(Dataset):
                 if bbox_new is not []:
                     annotation_new['object']['bbox_dimensions'] = bbox_new
                     annotation_new['object']['points_location'] = [[]]
-                    # annotations_new.append(annotation_new)
                     self.annotations.append(annotation_new)
                 else:
                     pass
@@ -192,10 +176,7 @@ class MultipleMarkersDataset(Dataset):
             det_tf = self.transform.to_deterministic()
             image = det_tf.augment_image(image)
             mask = det_tf.augment_image(mask, hooks=ia.HooksImages(activator=self._activator_masks))
-            # self.transform = transforms.Compose([
-            #     ImgAugTransforms(),
-            #     # lambda x:Image.fromarray(x),
-            #     ToTensor()])
+
         to_tensor = ToTensor()
         image = to_tensor(image)
         mask = to_tensor(mask)
@@ -205,6 +186,7 @@ class MultipleMarkersDataset(Dataset):
         # opencvimage = np.hstack((cv2.normalize(image.astype('float'), None, 0.0, 1.0, cv2.NORM_MINMAX), cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)))
         # cv2.imshow('Main', opencvimage)
         # cv2.waitKey(10)
+
         sample = {"image": image,
                   "mask": mask}
 
@@ -221,8 +203,6 @@ class MultipleMarkersDataset(Dataset):
 
         image = image[ymin:ymax, xmin:xmax]
         train_image = cv2.resize(image, (self.unet_image_size[1], self.unet_image_size[0]))
-        # train_image = train_image[np.newaxis, ...]
-        # train_image = np.array(train_image).astype(np.float32)
         return train_image
 
     def get_bbox(self, annotation):
@@ -248,19 +228,13 @@ class MultipleMarkersDataset(Dataset):
 
     def extract_mask(self, annotation):
         px, py = self.get_point_locations(annotation)
-        # if self.enlarge_bbox:
-        #     px = [x + int(self.bbox_add_pixels/2) for x in px]
-        #     py = [y + int(self.bbox_add_pixels/2) for y in py]
+
         if px == [] or py == []:
-            # self.no_annotation_images.append(annotation)
-            # print(self.no_annotation_images)
-            # print(len(self.no_annotation_images))
+
             mask = np.zeros((self.unet_image_size[0], self.unet_image_size[1]))
             # mask = np.array(mask).astype(np.float32)
         else:
             gauss_kernel = self.gaussian_2d((self.kernel_size, self.kernel_size), self.variance)
-            # mask = np.random.uniform(0, 1, (self.unet_image_size[0], self.unet_image_size[1]))
-            # mask /= np.sum(mask)
             mask = np.zeros((self.unet_image_size[0], self.unet_image_size[1]))
             for i in range(len(px)):
                 ex, ey = [px[i] - self.kernel_size // 2, py[i] - self.kernel_size // 2]
@@ -274,9 +248,7 @@ class MultipleMarkersDataset(Dataset):
                     print("error")
         # plt.imshow(mask)
         # plt.show()
-        # mask[mask < 1e-5] = 1e-5
         mask = mask[..., np.newaxis]
-        # mask = np.array(mask).astype(np.float32)
         return mask
 
     @staticmethod
@@ -295,24 +267,17 @@ class ToTensor(object):
     """Convert ndarrays in sample to Tensors."""
 
     def __call__(self, image):
-        # image= sample['image']
-        # mask = sample['mask']
+
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         # swap color axis because
         # numpy image: H x W x C
         # torch image: C X H X W
         image_copy = np.flip(image.transpose((2, 0, 1)), axis=0).copy()
-        # image = torch.from_numpy(image.copy())
         image_torch = torch.from_numpy(image_copy).float().to(device)
 
         eps = 1 / (image.shape[0]*image.shape[1])
         image_torch = torch.max(image_torch, torch.cuda.FloatTensor([eps]))
 
-        # mask = mask.transpose((2, 0, 1))
-        # mask = torch.from_numpy(mask).long()
-        #
-        # sample_tensor = {'image':image,
-        #                  'mask':mask}
         return image_torch
 
 
@@ -352,6 +317,7 @@ def show(img):
 
 def get_data_loaders(dataset_config):
     dataset = MultipleMarkersDataset(dataset_config)
+    
     # imgs = [dataset[i] for i in range(6)]
     # show(make_grid(torch.stack([img['image'].cpu() for img in imgs])))
     # show(make_grid(torch.stack([img['mask'].cpu() for img in imgs])))

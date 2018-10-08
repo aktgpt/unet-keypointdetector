@@ -73,7 +73,6 @@ class DownConv(nn.Module):
             x = self.conv_batch_norm(x)
         x = F.relu(x)
         x = self.dropout(x)
-        # x = self.dropout(x)
         before_pool = x
         if self.pooling:
             x = self.pool(x)
@@ -126,7 +125,7 @@ class UpConv(nn.Module):
         if self.batch_norm:
             x = self.conv_batch_norm(x)
         x = F.relu(x)
-        
+
         x = self.conv2(x)
         if self.batch_norm:
             x = self.conv_batch_norm(x)
@@ -134,26 +133,6 @@ class UpConv(nn.Module):
         return x
 
 class UNet(nn.Module):
-    """ `UNet` class is based on https://arxiv.org/abs/1505.04597
-    The U-Net is a convolutional encoder-decoder neural network.
-    Contextual spatial information (from the decoding,
-    expansive pathway) about an input tensor is merged with
-    information representing the localization of details
-    (from the encoding, compressive pathway).
-    Modifications to the original paper:
-    (1) padding is used in 3x3 convolutions to prevent loss
-        of border pixels
-    (2) merging outputs does not require cropping due to (1)
-    (3) residual connections can be used by specifying
-        UNet(merge_mode='add')
-    (4) if non-parametric upsampling is used in the decoder
-        pathway (specified by upmode='upsample'), then an
-        additional 1x1 2d convolution occurs after upsampling
-        to reduce channel dimensionality by a factor of 2.
-        This channel halving happens with the convolution in
-        the tranpose convolution (specified by upmode='transpose')
-    """
-
     def __init__(self, config):
         self.input_shape = tuple(config['unet']['input_shape'])
         self.num_classes = config['unet']['n_classes']
@@ -268,7 +247,7 @@ class FocalLoss2d(nn.Module):
         return self.nll_loss((1 - F.softmax(inputs)) ** self.gamma * F.log_softmax(inputs), targets)
 
 
-class UNetLoss(_Loss):
+class UNetCrossEntropyLoss(_Loss):
     def __init__(self):
         super(UNetLoss, self).__init__()
 
