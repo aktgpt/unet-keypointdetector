@@ -1,3 +1,4 @@
+import os
 import torch
 from torch.autograd import Variable
 import torch.nn as nn
@@ -40,10 +41,13 @@ class Trainer:
         self.val_split_ratio = config['train']['val_split_ratio']
 
         self.model_save_path = config['train']['model_save_path']
-
+        if not os.path.exists(self.model_save_path):
+            os.makedirs(self.model_save_path)
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.Model = model.to(self.device)
         self.logs_save_dir = config['train']['log_dir']
+        if not os.path.exists(self.logs_save_dir):
+            os.makedirs(self.logs_save_dir)
 
     # def train(self):
     #     train_loader, validation_loader = get_data_loaders(self.config)
@@ -280,7 +284,7 @@ def create_summary_writer(model, data_loader, log_dir):
 
 
 if __name__ == '__main__':
-    args = argparser.parse_args(['-c', 'configs/config_1.json'])
+    args = argparser.parse_args(['-c', 'configs/config_2.json'])
     config_path = args.conf
 
     with open(config_path) as config_buffer:

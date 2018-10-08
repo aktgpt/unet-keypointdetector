@@ -8,35 +8,36 @@
     },
 
     "mask": {
-        "kernel_size": 5,
-        "variance": 0.3
+        "kernel_size":          7,
+        "variance":             0.5
     },
 
     "train": {
-        "learning_rate": 1e-5,
-        "decay_type": "step",
-        "learning_rate_decay": 0.5,
-        "epoch_decay": 10,
-        "epochs": 100,
-        "batch_size": 8,
-        "val_split_ratio": 0.2,
-        "model_save_path": "models/ce_loss/",
-        "dropout":0.3
+        "learning_rate":        1e-5,
+        "decay_type":           "step",
+        "learning_rate_decay":  0.1,
+        "epoch_decay":          10,
+        "epochs":               100,
+        "batch_size":           8,
+        "val_split_ratio":      0.2,
+        "model_save_path":      "models/config_2/",
+        "dropout":              0.2,
+        "log_dir":              "logs/config_2/"
     },
 
     "unet": {
-        "input_shape": [128, 128, 3],
-        "n_classes": 1,
-        "start_ch": 32,
-        "depth": 4,
-        "batch_norm": true,
-        "up_mode": "transpose",
-        "merge_mode": "add"
+        "input_shape":          [128, 128, 3],
+        "n_classes":            1,
+        "start_ch":             32,
+        "depth":                4,
+        "batch_norm":           false,
+        "up_mode":              "transpose",
+        "merge_mode":           "add"
     },
 
-    "non_affine_aug": true,
+    "non_affine_aug":           true,
 
     "eval": {
-        "failure_thresh": 30
+        "failure_thresh":       30
     }
 }

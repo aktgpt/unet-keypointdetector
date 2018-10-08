@@ -1,0 +1,9 @@
+#Pycharm
+.idea/
+
+#Models
+*.pth
+*.h5
+logs/
+*.png
+*.mp4

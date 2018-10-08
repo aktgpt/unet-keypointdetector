@@ -1,11 +1,24 @@
-from torch.nn.modules.loss import _Loss, MSELoss
+import json
+import argparse
+from unet import UNet
 import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.nn import init
+import cv2
+import numpy as np
+import glob
 import matplotlib.pylab as plt
+import copy
 import time
 
+argparser = argparse.ArgumentParser(
+    description='Train U-net dataset')
+
+argparser.add_argument(
+    '-c',
+    '--conf',
+    help='path to configuration file')
 
 def conv3x3(in_channels, out_channels, stride=1,
             padding=1, bias=True, groups=1):
@@ -46,33 +59,23 @@ class DownConv(nn.Module):
     A helper Module that performs 2 convolutions and 1 MaxPool.
     A ReLU activation follows each convolution.
     """
-    def __init__(self, in_channels, out_channels, dropout, batch_norm, pooling=True):
+    def __init__(self, in_channels, out_channels, dropout, pooling=True):
         super(DownConv, self).__init__()
 
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.pooling = pooling
-        self.dropout = nn.Dropout(dropout)
-        self.batch_norm = batch_norm
+        self.dropout = dropout
 
         self.conv1 = conv3x3(self.in_channels, self.out_channels)
         self.conv2 = conv3x3(self.out_channels, self.out_channels)
 
-        if self.batch_norm:
-            self.conv_batch_norm = nn.BatchNorm2d(self.out_channels)
         if self.pooling:
             self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
 
     def forward(self, x):
-        x = self.conv1(x)
-        if self.batch_norm:
-            x = self.conv_batch_norm(x)
-        x = F.relu(x)
-        x = self.conv2(x)
-        if self.batch_norm:
-            x = self.conv_batch_norm(x)
-        x = F.relu(x)
-        x = self.dropout(x)
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
         # x = self.dropout(x)
         before_pool = x
         if self.pooling:
@@ -85,7 +88,7 @@ class UpConv(nn.Module):
     A helper Module that performs 2 convolutions and 1 UpConvolution.
     A ReLU activation follows each convolution.
     """
-    def __init__(self, in_channels, out_channels, batch_norm,
+    def __init__(self, in_channels, out_channels, dropout,
                  merge_mode='concat', up_mode='transpose'):
         super(UpConv, self).__init__()
 
@@ -93,10 +96,7 @@ class UpConv(nn.Module):
         self.out_channels = out_channels
         self.merge_mode = merge_mode
         self.up_mode = up_mode
-
-        self.batch_norm = batch_norm
-        if self.batch_norm:
-            self.conv_batch_norm = nn.BatchNorm2d(self.out_channels)
+        self.dropout = dropout
 
         self.upconv = upconv2x2(self.in_channels, self.out_channels,
             mode=self.up_mode)
@@ -121,16 +121,9 @@ class UpConv(nn.Module):
             x = torch.cat((from_up, from_down), 1)
         else:
             x = from_up + from_down
-
-        x = self.conv1(x)
-        if self.batch_norm:
-            x = self.conv_batch_norm(x)
-        x = F.relu(x)
-        
-        x = self.conv2(x)
-        if self.batch_norm:
-            x = self.conv_batch_norm(x)
-        x = F.relu(x)
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        # x = self.dropout(x)
         return x
 
 class UNet(nn.Module):
@@ -161,10 +154,9 @@ class UNet(nn.Module):
         self.depth = config['unet']['depth']
         up_mode = config['unet']['up_mode']
         merge_mode = config['unet']['merge_mode']
-        self.batch_norm = config['unet']['batch_norm']
 
         super(UNet, self).__init__()
-        self.dropout = config['train']['dropout']
+        self.dropout = nn.Dropout(config['unet']['dropout'])
 
         if up_mode in ('transpose', 'upsample'):
             self.up_mode = up_mode
@@ -200,7 +192,7 @@ class UNet(nn.Module):
             outs = self.start_channels * (2 ** i)
             pooling = True if i < self.depth - 1 else False
 
-            down_conv = DownConv(ins, outs, self.dropout, self.batch_norm, pooling=pooling)
+            down_conv = DownConv(ins, outs, self.dropout, pooling=pooling)
             self.down_convs.append(down_conv)
 
         # create the decoder pathway and add to a list
@@ -208,7 +200,7 @@ class UNet(nn.Module):
         for i in range(self.depth - 1):
             ins = outs
             outs = ins // 2
-            up_conv = UpConv(ins, outs, self.batch_norm, up_mode=up_mode,
+            up_conv = UpConv(ins, outs, self.dropout, up_mode=up_mode,
                              merge_mode=merge_mode)
             self.up_convs.append(up_conv)
 
@@ -241,7 +233,7 @@ class UNet(nn.Module):
         for i, module in enumerate(self.up_convs):
             before_pool = encoder_outs[-(i + 2)]
             x = module(before_pool, x)
-        # x = self.dropout(x)
+        x = self.dropout(x)
         # No softmax is used. This means you need to use
         # nn.CrossEntropyLoss is your training script,
         # as this module includes a softmax already.
@@ -249,46 +241,113 @@ class UNet(nn.Module):
         return x
 
 
-class CrossEntropyLoss2d(nn.Module):
-    def __init__(self, weight=None, size_average=True, ignore_index=255):
-        super(CrossEntropyLoss2d, self).__init__()
-        self.nll_loss = nn.NLLLoss2d(weight, size_average, ignore_index)
+class MultipleKeypointDetector:
+    def __init__(self, config_path):
+        self.config = config_path
+        self.threshold = 0
+        print("init")
+        self.load_config(config_path)
 
-    def forward(self, inputs, targets):
-        return self.nll_loss(F.log_softmax(inputs), targets)
+    def load_config(self, config_path):
+        with open(config_path) as config_buffer:
+            config = json.load(config_buffer)
+        self.unet_input_shape = tuple(config['unet']['input_shape'])
+        self.weight_path = config['weights_path']
+        self.model = UNet(config)
+
+    def set_threshold(self, threshold):
+        self.threshold = threshold
+
+    def init(self):
+        # self.summary()
+        self.load_weights(self.weight_path)
+
+    def load_weights(self, path):
+        self.model.cuda().float()
+        self.model.load_state_dict(torch.load(path))
+
+    def summary(self):
+        print(self.model.summary())
+
+    def predict(self, image):
+        # image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+        self.model.eval()
+        self.img_shape = np.shape(image)
+        img = cv2.resize(image, (self.unet_input_shape[1], self.unet_input_shape[0]))
+        img = img.transpose((2, 0, 1))
+        img = img[np.newaxis, ...]
+        # img_2 = np.concatenate((img, img, img, img), axis=0)
+        start = time.time()
+        img = torch.from_numpy(img).float().cuda()
+        # img_2 = img_2.type(torch.cuda.HalfTensor)
+        pred = self.model(img)
+        pred_np = pred.cpu().data.numpy()[0, 0, :, :]
+        end = time.time()
+        print(end-start)
+
+        # points = self.keypoints_location(pred)
+        pred_np = self.to_image_range(pred_np)
+        # prediction_image = self.to_image_range(pred_image)
+        return pred_np
+
+    def convert_predict_to_gray(self, prediction):
+        pred_image = prediction[0, :, :, 0]
+        mask = cv2.resize(pred_image, (self.img_shape[1], self.img_shape[0]))
+        return mask
+
+    def to_image_range(self, array):
+        """
+        This method maps the value range of any given array to the value range (0, 255).
+        :param array: the input array
+        :return: the linearly mapped output array with the same shape as the input array and value
+                 range (0, 255).
+        """
+        old_min = np.min(array)
+        old_max = np.max(array)
+        old_range = old_max - old_min
+        new_range = 255
+        arr_norm = [np.maximum(0, np.minimum(255, ((x - old_min) * new_range / old_range))) for x in array]
+        return np.reshape(arr_norm, array.shape).astype(np.uint8)
+
+    def find_local_maxima(self, image, threshold):
+        thresh_image = copy.deepcopy(image)
+        percentile_thres = np.percentile(image, threshold)
+        thresh_image[image <= percentile_thres] = 0
+        # image = cv2.GaussianBlur(image, (5, 5), 0)
+        strel3x3 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        strel5x5 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        strel7x7 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+        img_dilate3 = cv2.dilate(thresh_image, strel3x3)
+        img_dilate5 = cv2.dilate(thresh_image, strel5x5)
+        img_dilate7 = cv2.dilate(thresh_image, strel7x7)
+        dst3 = cv2.compare(image, img_dilate3, cv2.CMP_EQ)
+        dst5 = cv2.compare(image, img_dilate5, cv2.CMP_EQ)
+        dst7 = cv2.compare(image, img_dilate7, cv2.CMP_EQ)
+        dst_temp = np.logical_and(dst3, dst5)
+        dst = np.logical_and(dst_temp, dst7)
+        y, x = np.where(dst == True)
+        detections = np.zeros((len(x), 2))
+        idx = x.argsort()
+        detections[:, 0] = x[idx]
+        detections[:, 1] = y[idx]
+        return detections
 
 
-class FocalLoss2d(nn.Module):
-    def __init__(self, gamma=2, weight=None, size_average=True, ignore_index=255):
-        super(FocalLoss2d, self).__init__()
-        self.gamma = gamma
-        self.nll_loss = nn.NLLLoss2d(weight, size_average, ignore_index)
+if __name__ == '__main__':
+    args = argparser.parse_args(['-c', 'configs/config_keypoints.json'])
+    config_path = args.conf
+    # img_folder = '/home/ankit/Documents/Ankit-BackUp/Develop/vbtrack/data/calibration_images/left/'
+    img_folder = '/home/ankit/Documents/Ankit-BackUp/Develop/vbtrack/data/unet_images/'
+    images = glob.glob(img_folder+"*.png")
 
-    def forward(self, inputs, targets):
-        return self.nll_loss((1 - F.softmax(inputs)) ** self.gamma * F.log_softmax(inputs), targets)
+    keypoint_detector = MultipleKeypointDetector(config_path)
+    keypoint_detector.init()
 
-
-class UNetLoss(_Loss):
-    def __init__(self):
-        super(UNetLoss, self).__init__()
-
-    def forward(self, y_pred, y_true):
-        loss = -torch.sum(torch.mul(y_true, torch.log(y_pred)))
-        return loss
-
-class FocalLoss(nn.Module):
-    def __init__(self, gamma=2, alpha=10, size_average=True):
-        super(FocalLoss, self).__init__()
-        self.gamma = gamma
-        self.alpha = alpha
-        # if isinstance(alpha,(float, int)): self.alpha = torch.Tensor([alpha,1-alpha])
-        # if isinstance(alpha,list): self.alpha = torch.Tensor(alpha)
-        self.size_average = size_average
-
-    def forward(self, y_pred, y_true):
-        logpt = torch.mul(y_true, torch.log(y_pred))
-        pt = torch.exp(logpt)
-
-        loss = -self.alpha*((1-pt)**self.gamma) * logpt
-
-        return loss.sum()
+    for i in range(len(images)):
+        image = cv2.imread(images[i])
+        # start = time.time()
+        prediction = keypoint_detector.predict(image)
+        # end = time.time()
+        # print(end-start)
+        cv2.imshow("pred", prediction)
+        cv2.waitKey(200)
