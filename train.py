@@ -130,7 +130,7 @@ class Trainer:
             writer.add_scalar("validation/mean_euclidean_dist", precision_recall_loss['mean_euclidean_dist'], engine.state.epoch)
             writer.add_scalar("validation/cross_entropy_loss", cross_entropy_loss, engine.state.epoch)
 
-        checkpointer = ModelCheckpoint(self.model_save_path, 'unet_v_1_', save_interval=1, n_saved=20, require_empty=False,
+        checkpointer = ModelCheckpoint(self.model_save_path, 'unet_v_1_', save_interval=1, n_saved=50, require_empty=False,
                                         save_as_state_dict=True)
         # early_stopping = EarlyStopping(patience=5, score_function=self.score_function, trainer=trainer)
 
@@ -207,7 +207,7 @@ def create_summary_writer(model, data_loader, log_dir):
 
 
 if __name__ == '__main__':
-    args = argparser.parse_args(['-c', 'configs/config_2.json'])
+    args = argparser.parse_args(['-c', 'configs/config_3.json'])
     config_path = args.conf
 
     with open(config_path) as config_buffer:

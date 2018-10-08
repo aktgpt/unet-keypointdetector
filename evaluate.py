@@ -340,6 +340,6 @@ if __name__ == '__main__':
         # end = time.time()
         # print(end-start)
         for i in range(len(predictions)):
-            cv2.circle(imageg,(predictions[i,0], predictions[i,1]), 3, (0,0,255), -1))
+            cv2.circle(image,(predictions[i,0], predictions[i,1]), 3, (0,0,255), -1)
         cv2.imshow("keypoints", image)
         cv2.waitKey(200)

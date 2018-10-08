@@ -1,6 +1,7 @@
 # UNet-Keypointdetector
 
-This repository consists of U-Net implementation to extract keypoints in an image.
+This repository consists of U-Net implementation to extract keypoints in an image. The network gets the input from an object detector in form of bounding box which is passed through it and get the keypoint locations as the output.
+
 
 **Requirements**
 - pytorch 0.4.0
@@ -15,7 +16,11 @@ This repository consists of U-Net implementation to extract keypoints in an imag
 
 2. Annotation files
 Annotation files are structured in following json format:
-```json
+
+![picture](examples/multiple_keypoints_22.png)
+
+
+```
 
 {
 "file_path": "/home/ankit/Documents/Ankit-BackUp/Develop/vbtrack/data/multiple_markers_images/",
