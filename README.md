@@ -84,3 +84,7 @@ Update the json file and run training:
 
   `python train.py -c config.json`
 
+3. Evaluate
+Specify the U-Net structure in the `config_detector.json` and provide the images for the detections, as the cropped bounding box of the instrument marker.
+
+  `python evaluate.py -c config_detector.json`

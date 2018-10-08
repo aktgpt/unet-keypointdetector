@@ -1,0 +1,14 @@
+{
+  "weights_path": "unet_v0.6_ce_loss_epoch_33.pth",
+  "threshold": 99.2,
+
+  "unet": {
+        "input_shape": [128, 128, 3],
+        "n_classes": 1,
+        "start_ch": 32,
+        "depth": 4,
+        "batch_norm": true,
+        "up_mode": "transpose",
+        "merge_mode": "add",
+    }
+}
